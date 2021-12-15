@@ -1,6 +1,6 @@
-import { createContext, ReactNode, useContext, useState } from 'react';
+import { createContext, ReactNode, useContext } from 'react';
 import { toast } from 'react-toastify';
-import { api } from '../services/api';
+import { apiLoadProductById, apiLoadStockById } from '../services/api';
 import { Product, Stock } from '../types';
 import { useLocalStorageHook } from "./useLocalStorageHook";
 
@@ -35,19 +35,62 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
     return [];
   });
 
+  const validateStock = async (product: Product) => {
+    const stock = await apiLoadStockById(product.id);
+    if (product.amount > stock.amount)
+      throw new Error("Quantidade solicitada fora de estoque");
+
+  }
+
+  const validateExistsOnCart = (productId: number, message: string) => {
+    if (!cart.some(p => p.id === productId))
+      throw new Error(message);
+  }
+  const getProduct = async (productId: number, message: string) => {
+    try {
+
+      const product = await apiLoadProductById(productId);
+      if (productId === null)
+        throw new Error(message);
+      return product;
+    }
+    catch {
+      throw new Error(message);
+    }
+  }
+
+  const updateProduct = (product: Product) => {
+    if (cart.find(p => p.id === product.id))
+      setCart(cart.map(p => p.id === product.id ? product : p))
+    else
+      setCart([...cart, product])
+  }
+
   const addProduct = async (productId: number) => {
     try {
       // TODO
-    } catch {
+      const product = await getProduct(productId, "Erro na adição do produto");
+      let newProduct = cart.find(product => product.id === productId) || {
+        ...product,
+        amount: 0,
+      };
+      newProduct = { ...newProduct, amount: newProduct.amount + 1 }
+      await validateStock(newProduct);
+      updateProduct(newProduct);
+    } catch (erro) {
       // TODO
+      toast.error((erro as Error).message);
     }
   };
 
   const removeProduct = (productId: number) => {
     try {
       // TODO
-    } catch {
+      validateExistsOnCart(productId, "Erro na remoção do produto")
+      setCart(cart.filter(product => product.id !== productId))
+    } catch (erro) {
       // TODO
+      toast.error((erro as Error).message);
     }
   };
 
@@ -57,8 +100,19 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
   }: UpdateProductAmount) => {
     try {
       // TODO
-    } catch {
+      if (amount < 1) {
+        throw new Error("Erro na alteração de quantidade do produto");
+      }
+      validateExistsOnCart(productId, "Erro na alteração de quantidade do produto");
+
+      const product = { ...cart.find(product => product.id === productId), amount } as Product
+
+      await validateStock(product);
+
+      updateProduct(product);
+    } catch (erro) {
       // TODO
+      toast.error((erro as Error).message)
     }
   };
 
